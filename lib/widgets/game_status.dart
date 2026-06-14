@@ -6,12 +6,14 @@ class GameStatus extends StatelessWidget {
   final Player currentPlayer;
   final Player? winner;
   final bool isDraw;
+  final bool isBotThinking;
 
   const GameStatus({
     super.key,
     required this.currentPlayer,
     required this.winner,
     required this.isDraw,
+    this.isBotThinking = false,
   });
 
   @override
@@ -35,6 +37,11 @@ class GameStatus extends StatelessWidget {
       mainColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
       iconData = Icons.handshake_rounded;
       widgetKey = const ValueKey('draw');
+    } else if (isBotThinking) {
+      statusText = 'Máy đang suy nghĩ...';
+      mainColor = const Color(0xFF0F766E);
+      iconData = Icons.psychology_rounded;
+      widgetKey = const ValueKey('bot_thinking');
     } else {
       statusText = 'Lượt của: ${currentPlayer.label}';
       mainColor = currentPlayer.color;

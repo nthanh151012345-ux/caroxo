@@ -3,6 +3,7 @@ import '../logic/game_controller.dart';
 import '../widgets/board_widget.dart';
 import '../widgets/score_board.dart';
 import '../widgets/game_status.dart';
+import '../models/move_model.dart';
 
 /// Màn hình chính của trò chơi Cờ Caro
 class CaroScreen extends StatefulWidget {
@@ -26,6 +27,9 @@ class _CaroScreenState extends State<CaroScreen> {
   void initState() {
     super.initState();
     _controller = GameController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showGameModeDialog();
+    });
   }
 
   @override
@@ -91,6 +95,7 @@ class _CaroScreenState extends State<CaroScreen> {
                                 currentPlayer: _controller.currentPlayer,
                                 winner: _controller.winner,
                                 isDraw: _controller.isDraw,
+                                isBotThinking: _controller.isBotThinking,
                               ),
                               const SizedBox(height: 20),
 
@@ -196,10 +201,10 @@ class _CaroScreenState extends State<CaroScreen> {
           ),
           const SizedBox(width: 14),
           // Tiêu đề Game
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'CỜ CARO',
                 style: TextStyle(
                   fontSize: 20,
@@ -209,8 +214,10 @@ class _CaroScreenState extends State<CaroScreen> {
                 ),
               ),
               Text(
-                'Gomoku Game 15x15',
-                style: TextStyle(
+                _controller.gameMode == GameMode.againstBot
+                    ? 'Đấu với máy - ${_controller.difficulty == Difficulty.easy ? "Dễ" : "Khó"} (20x20)'
+                    : 'Đấu 2 người (20x20)',
+                style: const TextStyle(
                   fontSize: 11,
                   color: Colors.white70,
                   fontWeight: FontWeight.w500,
@@ -278,10 +285,10 @@ class _CaroScreenState extends State<CaroScreen> {
         // Nút Hoàn tác (Undo)
         Expanded(
           child: _buildGradientButton(
-            onPressed: _controller.moveHistory.isNotEmpty ? _controller.undo : null,
+            onPressed: (_controller.moveHistory.isNotEmpty && !_controller.isBotThinking) ? _controller.undo : null,
             label: 'Undo',
             icon: Icons.undo_rounded,
-            gradientColors: _controller.moveHistory.isNotEmpty
+            gradientColors: (_controller.moveHistory.isNotEmpty && !_controller.isBotThinking)
                 ? [const Color(0xFF64748B), const Color(0xFF475569)]
                 : [const Color(0xFF94A3B8).withValues(alpha: 0.5), const Color(0xFF94A3B8).withValues(alpha: 0.5)],
           ),
@@ -290,20 +297,29 @@ class _CaroScreenState extends State<CaroScreen> {
         // Nút Ván mới (New Game)
         Expanded(
           child: _buildGradientButton(
-            onPressed: _controller.newGame,
+            onPressed: _controller.isBotThinking ? null : _showGameModeDialog,
             label: 'Ván mới',
             icon: Icons.refresh_rounded,
-            gradientColors: const [Color(0xFF0F766E), Color(0xFF0D9488)],
+            gradientColors: _controller.isBotThinking
+                ? [const Color(0xFF94A3B8).withValues(alpha: 0.5), const Color(0xFF94A3B8).withValues(alpha: 0.5)]
+                : const [Color(0xFF0F766E), Color(0xFF0D9488)],
           ),
         ),
         const SizedBox(width: 12),
         // Nút Khởi động lại Điểm (Reset Score)
         Expanded(
           child: _buildGradientButton(
-            onPressed: _controller.resetScore,
+            onPressed: _controller.isBotThinking
+                ? null
+                : () {
+                    _controller.resetScore();
+                    _showGameModeDialog();
+                  },
             label: 'Reset Điểm',
             icon: Icons.settings_backup_restore_rounded,
-            gradientColors: const [Color(0xFFD62828), Color(0xFFDC2626)],
+            gradientColors: _controller.isBotThinking
+                ? [const Color(0xFF94A3B8).withValues(alpha: 0.5), const Color(0xFF94A3B8).withValues(alpha: 0.5)]
+                : const [Color(0xFFD62828), Color(0xFFDC2626)],
           ),
         ),
       ],
@@ -361,6 +377,290 @@ class _CaroScreenState extends State<CaroScreen> {
             fontWeight: FontWeight.w800,
             fontSize: 13,
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Dialog chọn chế độ chơi (2 người / đấu với máy)
+  void _showGameModeDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+          elevation: 10,
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(28.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.grid_4x4_rounded,
+                  color: Color(0xFF0F766E),
+                  size: 50,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'CHỌN CHẾ ĐỘ CHƠI',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : const Color(0xFF0F766E),
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Bàn cờ 20x20 - Đánh 5 ô liên tiếp để thắng',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Nút Đấu 2 người
+                _buildModeOption(
+                  icon: Icons.people_alt_rounded,
+                  title: 'Đấu 2 Người',
+                  subtitle: 'Hai người chơi thay phiên nhau trên cùng máy',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _controller.newGame(mode: GameMode.twoPlayers);
+                  },
+                  isDark: isDark,
+                ),
+                const SizedBox(height: 16),
+
+                // Nút Chơi với máy
+                _buildModeOption(
+                  icon: Icons.smart_toy_rounded,
+                  title: 'Đấu Với Máy',
+                  subtitle: 'Thách đấu với trí tuệ nhân tạo (AI)',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _showDifficultyDialog();
+                  },
+                  isDark: isDark,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Widget hiển thị tùy chọn Chế độ chơi
+  Widget _buildModeOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isDark ? Colors.white24 : Colors.black12,
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F766E).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: const Color(0xFF0F766E), size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Dialog chọn độ khó của Bot
+  void _showDifficultyDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+          elevation: 10,
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(28.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.psychology_rounded,
+                  color: Color(0xFF0F766E),
+                  size: 50,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'CHỌN ĐỘ KHÓ',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : const Color(0xFF0F766E),
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Mức Dễ
+                _buildDifficultyOption(
+                  title: 'Dễ (Easy)',
+                  subtitle: 'Máy đánh nhẹ nhàng, thỉnh thoảng có sơ hở',
+                  color: const Color(0xFF10B981),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _controller.newGame(mode: GameMode.againstBot, diff: Difficulty.easy);
+                  },
+                  isDark: isDark,
+                ),
+                const SizedBox(height: 16),
+
+                // Mức Khó
+                _buildDifficultyOption(
+                  title: 'Khó (Hard)',
+                  subtitle: 'Máy tính toán thông minh, công thủ nhạy bén',
+                  color: const Color(0xFFEF4444),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _controller.newGame(mode: GameMode.againstBot, diff: Difficulty.hard);
+                  },
+                  isDark: isDark,
+                ),
+                const SizedBox(height: 20),
+
+                // Nút quay lại
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _showGameModeDialog();
+                  },
+                  icon: const Icon(Icons.arrow_back_rounded, size: 16, color: Color(0xFF0F766E)),
+                  label: const Text(
+                    'Quay lại chọn chế độ',
+                    style: TextStyle(
+                      color: Color(0xFF0F766E),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                )
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Widget hiển thị tùy chọn Độ khó
+  Widget _buildDifficultyOption({
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: color.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.offline_bolt_rounded, color: color, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: color),
+          ],
         ),
       ),
     );

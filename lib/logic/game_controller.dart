@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/move_model.dart';
 import 'sound_manager.dart';
+import 'caro_ai.dart';
 
 /// Bộ điều khiển logic chính của game Caro (Gomoku)
 class GameController extends ChangeNotifier {
-  static const int boardSize = 15;
+  static const int boardSize = 20;
 
-  /// Bàn cờ 15x15 chứa thông tin các quân cờ đã đánh
+  /// Bàn cờ 20x20 chứa thông tin các quân cờ đã đánh
   late List<List<Player?>> board;
 
   /// Lịch sử các nước đi để phục vụ chức năng Undo
@@ -32,6 +33,15 @@ class GameController extends ChangeNotifier {
   int oWins = 0;
   int draws = 0;
 
+  /// Chế độ chơi hiện tại
+  GameMode gameMode = GameMode.twoPlayers;
+
+  /// Độ khó của máy hiện tại
+  Difficulty difficulty = Difficulty.easy;
+
+  /// Trạng thái máy đang suy nghĩ
+  bool isBotThinking = false;
+
   GameController() {
     _initBoard();
   }
@@ -44,13 +54,23 @@ class GameController extends ChangeNotifier {
     );
   }
 
-  /// Thực hiện nước đi tại vị trí (row, col)
+  /// Thực hiện nước đi tại vị trí (row, col) - Được gọi từ UI
   void playMove(int row, int col) {
-    // Nếu ô đã được đánh hoặc game đã kết thúc thì không làm gì
-    if (board[row][col] != null || winner != null || isDraw) {
+    // Nếu ô đã được đánh, game đã kết thúc hoặc máy đang suy nghĩ thì không làm gì
+    if (board[row][col] != null || winner != null || isDraw || isBotThinking) {
       return;
     }
 
+    // Nếu ở chế độ đấu với máy, chỉ cho phép người chơi đánh ở lượt của X
+    if (gameMode == GameMode.againstBot && currentPlayer != Player.x) {
+      return;
+    }
+
+    _executeMove(row, col);
+  }
+
+  /// Logic thực thi một nước đi và kiểm tra trạng thái game
+  void _executeMove(int row, int col) {
     board[row][col] = currentPlayer;
     final move = BoardMove(
       row: row,
@@ -80,6 +100,25 @@ class GameController extends ChangeNotifier {
       // Đổi lượt đi
       currentPlayer = currentPlayer.opponent;
       SoundManager.playMove();
+
+      // Nếu là chế độ chơi với máy và tới lượt của Bot (O)
+      if (gameMode == GameMode.againstBot && currentPlayer == Player.o && winner == null && !isDraw) {
+        isBotThinking = true;
+        notifyListeners();
+
+        // Máy suy nghĩ và đánh sau 500ms
+        Future.delayed(const Duration(milliseconds: 500), () {
+          // Kiểm tra lại các điều kiện trước khi đánh để tránh lỗi do click nhanh/undo
+          if (winner == null && !isDraw && currentPlayer == Player.o && gameMode == GameMode.againstBot) {
+            isBotThinking = false;
+            final botMove = CaroAI.findBestMove(board, boardSize, Player.o, difficulty);
+            _executeMove(botMove.row, botMove.col);
+          } else {
+            isBotThinking = false;
+            notifyListeners();
+          }
+        });
+      }
     }
 
     notifyListeners();
@@ -87,6 +126,21 @@ class GameController extends ChangeNotifier {
 
   /// Hoàn tác nước đi (Undo)
   void undo() {
+    if (moveHistory.isEmpty || isBotThinking) return;
+
+    _undoSingleMove();
+
+    // Nếu chơi với máy và lượt tiếp theo là của máy (tức là ta vừa undo nước đi của người chơi X,
+    // quay về lượt O của máy), ta cần undo thêm 1 nước nữa để đưa về lượt của người chơi X.
+    if (gameMode == GameMode.againstBot && currentPlayer == Player.o && moveHistory.isNotEmpty) {
+      _undoSingleMove();
+    }
+
+    notifyListeners();
+  }
+
+  /// Thực hiện rút lại 1 nước đi đơn lẻ
+  void _undoSingleMove() {
     if (moveHistory.isEmpty) return;
 
     // Nếu game đã kết thúc trước đó, cần thu hồi kết quả điểm số
@@ -107,7 +161,7 @@ class GameController extends ChangeNotifier {
     final last = moveHistory.removeLast();
     board[last.row][last.col] = null;
 
-    // Cập nhật lại nước đi cuối cùng
+    // Cập nhật lại nước đi cuối cùng để highlight
     if (moveHistory.isNotEmpty) {
       final prev = moveHistory.last;
       lastMove = BoardCoordinate(prev.row, prev.col);
@@ -117,12 +171,13 @@ class GameController extends ChangeNotifier {
 
     // Trả lại lượt đi cho người vừa bị hoàn tác
     currentPlayer = last.player;
-
-    notifyListeners();
   }
 
   /// Chơi ván mới (Giữ nguyên điểm số)
-  void newGame() {
+  void newGame({GameMode? mode, Difficulty? diff}) {
+    if (mode != null) gameMode = mode;
+    if (diff != null) difficulty = diff;
+
     _initBoard();
     moveHistory.clear();
     currentPlayer = Player.x;
@@ -130,15 +185,16 @@ class GameController extends ChangeNotifier {
     winningLine = [];
     isDraw = false;
     lastMove = null;
+    isBotThinking = false;
     notifyListeners();
   }
 
   /// Làm mới điểm số và chơi ván mới
-  void resetScore() {
+  void resetScore({GameMode? mode, Difficulty? diff}) {
     xWins = 0;
     oWins = 0;
     draws = 0;
-    newGame();
+    newGame(mode: mode, diff: diff);
   }
 
   /// Thuật toán kiểm tra thắng cuộc tối ưu O(1) từ vị trí đánh mới nhất
@@ -147,8 +203,8 @@ class GameController extends ChangeNotifier {
     final directions = [
       (dr: 0, dc: 1),   // Hàng ngang
       (dr: 1, dc: 0),   // Hàng dọc
-      (dr: 1, dc: 1),   // Đường chéo chính (trên-trái xuống dưới-phải)
-      (dr: 1, dc: -1),  // Đường chéo phụ (dưới-trái lên trên-phải)
+      (dr: 1, dc: 1),   // Đường chéo chính
+      (dr: 1, dc: -1),  // Đường chéo phụ
     ];
 
     for (final dir in directions) {
@@ -172,9 +228,8 @@ class GameController extends ChangeNotifier {
         c -= dir.dc;
       }
 
-      // Luật Caro chuẩn: 5 quân liên tiếp cùng loại
+      // Luật Caro chuẩn: 5 quân liên tiếp cùng loại trở lên
       if (line.length >= 5) {
-        // Trả về đúng 5 quân chiến thắng để highlight (hoặc tất cả quân tạo thành chuỗi >= 5)
         return line;
       }
     }

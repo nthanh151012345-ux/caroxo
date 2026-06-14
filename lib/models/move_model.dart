@@ -50,3 +50,15 @@ class BoardMove {
     required this.moveNumber,
   });
 }
+
+/// Chế độ chơi của game Caro
+enum GameMode {
+  twoPlayers, // 2 người chơi trên cùng máy
+  againstBot,  // Chơi với máy (AI)
+}
+
+/// Độ khó của Bot (AI)
+enum Difficulty {
+  easy, // Dễ
+  hard, // Khó
+}
