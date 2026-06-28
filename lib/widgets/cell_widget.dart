@@ -34,11 +34,11 @@ class _CellWidgetState extends State<CellWidget> with SingleTickerProviderStateM
     // Tạo hiệu ứng scale đàn hồi khi đặt quân
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 250),
     );
     _scaleAnimation = CurvedAnimation(
       parent: _controller,
-      curve: Curves.elasticOut,
+      curve: Curves.easeOutBack,
     );
 
     if (widget.player != null) {
@@ -94,7 +94,7 @@ class _CellWidgetState extends State<CellWidget> with SingleTickerProviderStateM
       );
     } else {
       decoration = BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFCF0),
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         border: Border.all(
           color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
           width: 0.5,
@@ -155,7 +155,7 @@ class _CellWidgetState extends State<CellWidget> with SingleTickerProviderStateM
     return Text(
       player.label,
       style: TextStyle(
-        fontSize: 22,
+        fontSize: 24,
         fontWeight: FontWeight.w900,
         height: 1.0,
         color: isWinning ? Colors.white : player.color,

@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import '../logic/game_controller.dart';
 import '../widgets/board_widget.dart';
-import '../widgets/score_board.dart';
-import '../widgets/game_status.dart';
 import '../models/move_model.dart';
 
 /// Màn hình chính của trò chơi Cờ Caro
 class CaroScreen extends StatefulWidget {
   final String? userEmail;
   final VoidCallback? onSignOut;
+  final GameMode initialMode;
+  final Difficulty initialDifficulty;
+  final int initialBoardSize;
 
   const CaroScreen({
     super.key,
     this.userEmail,
     this.onSignOut,
+    required this.initialMode,
+    required this.initialDifficulty,
+    required this.initialBoardSize,
   });
 
   @override
@@ -27,9 +31,10 @@ class _CaroScreenState extends State<CaroScreen> {
   void initState() {
     super.initState();
     _controller = GameController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showGameModeDialog();
-    });
+    _controller.gameMode = widget.initialMode;
+    _controller.difficulty = widget.initialDifficulty;
+    _controller.boardSize = widget.initialBoardSize;
+    _controller.newGame();
   }
 
   @override
@@ -69,90 +74,30 @@ class _CaroScreenState extends State<CaroScreen> {
             builder: (context, child) {
               return LayoutBuilder(
                 builder: (context, constraints) {
-                  final bool isTablet = constraints.maxWidth > 600;
-
                   return Column(
                     children: [
                       // 1. Header game
                       _buildHeader(isDark),
 
-                      // Nội dung chính: tự động điều chỉnh dạng cột (Mobile) hoặc hàng (Tablet)
+                      // 2. Khu vực bàn cờ chiếm gần toàn bộ màn hình
                       Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Column(
-                            children: [
-                              // 2. Bảng điểm (Score board)
-                              ScoreBoard(
-                                xWins: _controller.xWins,
-                                oWins: _controller.oWins,
-                                draws: _controller.draws,
-                              ),
-                              const SizedBox(height: 16),
-
-                              // 3. Trạng thái Game (Status Area)
-                              GameStatus(
-                                currentPlayer: _controller.currentPlayer,
-                                winner: _controller.winner,
-                                isDraw: _controller.isDraw,
-                                isBotThinking: _controller.isBotThinking,
-                              ),
-                              const SizedBox(height: 20),
-
-                              // 4. Bàn cờ (Game Board)
-                              // Sử dụng InteractiveViewer để hỗ trợ zoom & pan trên thiết bị di động
-                              Container(
-                                constraints: BoxConstraints(
-                                  maxWidth: isTablet ? 600 : constraints.maxWidth,
-                                  maxHeight: isTablet ? 600 : constraints.maxWidth,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(24),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.08),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(24),
-                                  child: Container(
-                                    height: isTablet ? 500 : constraints.maxWidth - 32,
-                                    width: isTablet ? 500 : constraints.maxWidth - 32,
-                                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                                    child: InteractiveViewer(
-                                      clipBehavior: Clip.hardEdge,
-                                      minScale: 0.5,
-                                      maxScale: 2.5,
-                                      boundaryMargin: const EdgeInsets.all(50),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(12.0),
-                                        child: SizedBox(
-                                          width: 520,
-                                          height: 520,
-                                          child: BoardWidget(
-                                            board: _controller.board,
-                                            winningLine: _controller.winningLine,
-                                            lastMove: _controller.lastMove,
-                                            onCellTap: _controller.playMove,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-
-                              // 5. Bảng điều khiển nút ở dưới
-                              _buildBottomControls(isTablet),
-                              const SizedBox(height: 24),
-                            ],
+                        child: Container(
+                          color: Colors.white, // Nền màu trắng
+                          alignment: Alignment.center,
+                          child: AspectRatio(
+                            aspectRatio: 1.0,
+                            child: BoardWidget(
+                              board: _controller.board,
+                              winningLine: _controller.winningLine,
+                              lastMove: _controller.lastMove,
+                              onCellTap: _controller.playMove,
+                            ),
                           ),
                         ),
                       ),
+
+                      // 3. Thanh bottom bar màu xanh
+                      _buildBottomBar(context, isDark),
                     ],
                   );
                 },
@@ -168,7 +113,6 @@ class _CaroScreenState extends State<CaroScreen> {
   Widget _buildHeader(bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF0F766E), Color(0xFF14B8A6)],
@@ -186,20 +130,30 @@ class _CaroScreenState extends State<CaroScreen> {
       ),
       child: Row(
         children: [
-          // Icon Game
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
+          // Icon Game / Nút quay lại
+          if (Navigator.canPop(context)) ...[
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 22),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-            child: const Icon(
-              Icons.grid_4x4_rounded,
-              color: Colors.white,
-              size: 28,
+            const SizedBox(width: 12),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.grid_4x4_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
             ),
-          ),
-          const SizedBox(width: 14),
+            const SizedBox(width: 14),
+          ],
           // Tiêu đề Game
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,8 +169,8 @@ class _CaroScreenState extends State<CaroScreen> {
               ),
               Text(
                 _controller.gameMode == GameMode.againstBot
-                    ? 'Đấu với máy - ${_controller.difficulty == Difficulty.easy ? "Dễ" : "Khó"} (20x20)'
-                    : 'Đấu 2 người (20x20)',
+                    ? 'Đấu với máy - ${_controller.difficulty == Difficulty.easy ? "Dễ" : "Khó"} (${_controller.boardSize}x${_controller.boardSize})'
+                    : 'Đấu 2 người (${_controller.boardSize}x${_controller.boardSize})',
                 style: const TextStyle(
                   fontSize: 11,
                   color: Colors.white70,
@@ -278,391 +232,173 @@ class _CaroScreenState extends State<CaroScreen> {
     );
   }
 
-  /// Xây dựng cụm nút điều khiển ở cuối màn hình
-  Widget _buildBottomControls(bool isTablet) {
-    return Row(
-      children: [
-        // Nút Hoàn tác (Undo)
-        Expanded(
-          child: _buildGradientButton(
-            onPressed: (_controller.moveHistory.isNotEmpty && !_controller.isBotThinking) ? _controller.undo : null,
-            label: 'Undo',
-            icon: Icons.undo_rounded,
-            gradientColors: (_controller.moveHistory.isNotEmpty && !_controller.isBotThinking)
-                ? [const Color(0xFF64748B), const Color(0xFF475569)]
-                : [const Color(0xFF94A3B8).withValues(alpha: 0.5), const Color(0xFF94A3B8).withValues(alpha: 0.5)],
-          ),
-        ),
-        const SizedBox(width: 12),
-        // Nút Ván mới (New Game)
-        Expanded(
-          child: _buildGradientButton(
-            onPressed: _controller.isBotThinking ? null : _showGameModeDialog,
-            label: 'Ván mới',
-            icon: Icons.refresh_rounded,
-            gradientColors: _controller.isBotThinking
-                ? [const Color(0xFF94A3B8).withValues(alpha: 0.5), const Color(0xFF94A3B8).withValues(alpha: 0.5)]
-                : const [Color(0xFF0F766E), Color(0xFF0D9488)],
-          ),
-        ),
-        const SizedBox(width: 12),
-        // Nút Khởi động lại Điểm (Reset Score)
-        Expanded(
-          child: _buildGradientButton(
-            onPressed: _controller.isBotThinking
-                ? null
-                : () {
-                    _controller.resetScore();
-                    _showGameModeDialog();
-                  },
-            label: 'Reset Điểm',
-            icon: Icons.settings_backup_restore_rounded,
-            gradientColors: _controller.isBotThinking
-                ? [const Color(0xFF94A3B8).withValues(alpha: 0.5), const Color(0xFF94A3B8).withValues(alpha: 0.5)]
-                : const [Color(0xFFD62828), Color(0xFFDC2626)],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Helper vẽ nút bấm bo tròn có hiệu ứng Gradient
-  Widget _buildGradientButton({
-    required VoidCallback? onPressed,
-    required String label,
-    required IconData icon,
-    required List<Color> gradientColors,
-  }) {
-    final bool isEnabled = onPressed != null;
-
+  /// Xây dựng thanh bottom bar màu xanh
+  Widget _buildBottomBar(BuildContext context, bool isDark) {
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: isEnabled
-            ? [
-                BoxShadow(
-                  color: gradientColors.last.withValues(alpha: 0.35),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : null,
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F766E), // Thanh bottom bar màu xanh
       ),
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-        ),
-        icon: Icon(
-          icon,
-          color: isEnabled ? Colors.white : Colors.white60,
-          size: 18,
-        ),
-        label: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: isEnabled ? Colors.white : Colors.white60,
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Dialog chọn chế độ chơi (2 người / đấu với máy)
-  void _showGameModeDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-          ),
-          elevation: 10,
-          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(28.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.grid_4x4_rounded,
-                  color: Color(0xFF0F766E),
-                  size: 50,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Bên trái: avatar người chơi
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.white24,
+                child: widget.userEmail != null
+                    ? Text(
+                        widget.userEmail![0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.person_rounded,
+                        color: Colors.white,
+                      ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'CHỌN CHẾ ĐỘ CHƠI',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : const Color(0xFF0F766E),
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Bàn cờ 20x20 - Đánh 5 ô liên tiếp để thắng',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
+                child: Text(
+                  _controller.winner != null
+                      ? 'Thắng: ${_controller.winner!.label}'
+                      : (_controller.isDraw
+                          ? 'Hòa cờ'
+                          : 'Lượt: ${_controller.currentPlayer.label}'),
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 12,
-                    color: isDark ? Colors.white60 : Colors.black54,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 24),
-
-                // Nút Đấu 2 người
-                _buildModeOption(
-                  icon: Icons.people_alt_rounded,
-                  title: 'Đấu 2 Người',
-                  subtitle: 'Hai người chơi thay phiên nhau trên cùng máy',
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _controller.newGame(mode: GameMode.twoPlayers);
-                  },
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 16),
-
-                // Nút Chơi với máy
-                _buildModeOption(
-                  icon: Icons.smart_toy_rounded,
-                  title: 'Đấu Với Máy',
-                  subtitle: 'Thách đấu với trí tuệ nhân tạo (AI)',
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _showDifficultyDialog();
-                  },
-                  isDark: isDark,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Widget hiển thị tùy chọn Chế độ chơi
-  Widget _buildModeOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: isDark ? Colors.white24 : Colors.black12,
-            width: 1.5,
-          ),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F766E).withValues(alpha: 0.15),
-                shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: const Color(0xFF0F766E), size: 24),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+            ],
+          ),
+          // Bên phải: icon Chat, Icon Menu
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Tính năng Chat đang được phát triển!'),
+                      duration: Duration(seconds: 1),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? Colors.white60 : Colors.black54,
-                    ),
-                  ),
-                ],
+                  );
+                },
               ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.grey),
-          ],
-        ),
+              IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                onPressed: () => _showMenuBottomSheet(context),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  /// Dialog chọn độ khó của Bot
-  void _showDifficultyDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
+  /// Hiển thị trình đơn Bottom Sheet khi chạm Menu
+  void _showMenuBottomSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-          ),
-          elevation: 10,
-          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(28.0),
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.psychology_rounded,
-                  color: Color(0xFF0F766E),
-                  size: 50,
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'CHỌN ĐỘ KHÓ',
+                const Text(
+                  'TÙY CHỌN GAME',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 16,
                     fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : const Color(0xFF0F766E),
-                    letterSpacing: 1.2,
+                    color: Color(0xFF0F766E),
+                    letterSpacing: 0.8,
                   ),
-                ),
-                const SizedBox(height: 24),
-
-                // Mức Dễ
-                _buildDifficultyOption(
-                  title: 'Dễ (Easy)',
-                  subtitle: 'Máy đánh nhẹ nhàng, thỉnh thoảng có sơ hở',
-                  color: const Color(0xFF10B981),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _controller.newGame(mode: GameMode.againstBot, diff: Difficulty.easy);
-                  },
-                  isDark: isDark,
                 ),
                 const SizedBox(height: 16),
-
-                // Mức Khó
-                _buildDifficultyOption(
-                  title: 'Khó (Hard)',
-                  subtitle: 'Máy tính toán thông minh, công thủ nhạy bén',
-                  color: const Color(0xFFEF4444),
+                ListTile(
+                  leading: const Icon(Icons.undo_rounded, color: Color(0xFF0F766E)),
+                  title: const Text('Hoàn tác nước đi (Undo)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  enabled: _controller.moveHistory.isNotEmpty && !_controller.isBotThinking,
                   onTap: () {
-                    Navigator.of(context).pop();
-                    _controller.newGame(mode: GameMode.againstBot, diff: Difficulty.hard);
+                    Navigator.pop(context);
+                    _controller.undo();
                   },
-                  isDark: isDark,
                 ),
-                const SizedBox(height: 20),
-
-                // Nút quay lại
-                TextButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _showGameModeDialog();
+                ListTile(
+                  leading: const Icon(Icons.refresh_rounded, color: Color(0xFF0F766E)),
+                  title: const Text('Ván mới', style: TextStyle(fontWeight: FontWeight.bold)),
+                  enabled: !_controller.isBotThinking,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _controller.newGame();
                   },
-                  icon: const Icon(Icons.arrow_back_rounded, size: 16, color: Color(0xFF0F766E)),
-                  label: const Text(
-                    'Quay lại chọn chế độ',
-                    style: TextStyle(
-                      color: Color(0xFF0F766E),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.settings_backup_restore_rounded, color: Color(0xFFD62828)),
+                  title: const Text('Khởi động lại Điểm', style: TextStyle(color: Color(0xFFD62828), fontWeight: FontWeight.bold)),
+                  enabled: !_controller.isBotThinking,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _controller.resetScore();
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.arrow_back_rounded, color: Colors.blue),
+                  title: const Text('Quay lại chọn chế độ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pop(context);
+                  },
+                ),
+                if (widget.userEmail != null)
+                  ListTile(
+                    leading: const Icon(Icons.logout_rounded, color: Colors.black54),
+                    title: const Text('Đăng xuất tài khoản', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pop(context);
+                      if (widget.onSignOut != null) {
+                        widget.onSignOut!();
+                      }
+                    },
                   ),
-                )
               ],
             ),
           ),
         );
       },
-    );
-  }
-
-  /// Widget hiển thị tùy chọn Độ khó
-  Widget _buildDifficultyOption({
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: color.withValues(alpha: 0.5),
-            width: 1.5,
-          ),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.offline_bolt_rounded, color: color, size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? Colors.white60 : Colors.black54,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, color: color),
-          ],
-        ),
-      ),
     );
   }
 }
