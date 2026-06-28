@@ -76,8 +76,8 @@ class _CaroScreenState extends State<CaroScreen> {
                 builder: (context, constraints) {
                   return Column(
                     children: [
-                      // 1. Header game
-                      _buildHeader(isDark),
+                      // 1. Top bar: thông tin đối thủ
+                      _buildTopBar(),
 
                       // 2. Khu vực bàn cờ chiếm gần toàn bộ màn hình
                       Expanded(
@@ -109,124 +109,61 @@ class _CaroScreenState extends State<CaroScreen> {
     );
   }
 
-  /// Widget vẽ Header của Game kèm thông tin tài khoản nếu có
-  Widget _buildHeader(bool isDark) {
+  /// Thanh trên cùng: thông tin đối thủ + nút quay lại
+  Widget _buildTopBar() {
+    final String opponentName;
+    final Widget opponentAvatar;
+
+    if (_controller.gameMode == GameMode.againstBot) {
+      opponentName = 'Bot • ${_controller.difficulty == Difficulty.easy ? "Dễ" : "Khó"}';
+      opponentAvatar = const CircleAvatar(
+        radius: 18,
+        backgroundColor: Colors.white24,
+        child: Icon(Icons.smart_toy_rounded, color: Colors.white, size: 20),
+      );
+    } else {
+      opponentName = 'Người chơi 2';
+      opponentAvatar = const CircleAvatar(
+        radius: 18,
+        backgroundColor: Colors.white24,
+        child: Icon(Icons.person_rounded, color: Colors.white, size: 20),
+      );
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F766E), Color(0xFF14B8A6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F766E).withValues(alpha: 0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F766E),
       ),
       child: Row(
         children: [
-          // Icon Game / Nút quay lại
-          if (Navigator.canPop(context)) ...[
-            IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 22),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: () => Navigator.of(context).pop(),
+          // Bên trái: avatar + tên đối thủ
+          opponentAvatar,
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(width: 12),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.grid_4x4_rounded,
+            child: Text(
+              opponentName,
+              style: const TextStyle(
                 color: Colors.white,
-                size: 28,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(width: 14),
-          ],
-          // Tiêu đề Game
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'CỜ CARO',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              Text(
-                _controller.gameMode == GameMode.againstBot
-                    ? 'Đấu với máy - ${_controller.difficulty == Difficulty.easy ? "Dễ" : "Khó"} (${_controller.boardSize}x${_controller.boardSize})'
-                    : 'Đấu 2 người (${_controller.boardSize}x${_controller.boardSize})',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
           ),
           const Spacer(),
-          // Hiển thị email và nút Logout nếu được cấu hình Supabase
-          if (widget.userEmail != null) ...[
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 120),
-                  child: Text(
-                    widget.userEmail!,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                GestureDetector(
-                  onTap: widget.onSignOut,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.logout, color: Colors.white, size: 12),
-                        SizedBox(width: 4),
-                        Text(
-                          'Đăng xuất',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+          // Bên phải: nút quay lại
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white, size: 20),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-          ],
         ],
       ),
     );
