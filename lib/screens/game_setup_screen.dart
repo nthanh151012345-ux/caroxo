@@ -21,6 +21,8 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
   GameMode _selectedMode = GameMode.againstBot;
   Difficulty _selectedDifficulty = Difficulty.easy;
   int _selectedBoardSize = 15; // default to standard 15x15
+  /// null = không giới hạn thời gian
+  int? _selectedTimeLimit = 30;
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +170,10 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                             ),
                           ),
                           const SizedBox(height: 32),
+
+                          // Chọn thời gian mỗi lượt
+                          _buildTimeLimitSelector(isDark),
+                          const SizedBox(height: 24),
 
                           // Nút Bắt đầu ván đấu
                           _buildStartButton(),
@@ -560,6 +566,87 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
     );
   }
 
+  /// Chọn giới hạn thời gian mỗi lượt
+  Widget _buildTimeLimitSelector(bool isDark) {
+    final options = [
+      (15, '15 giây'),
+      (30, '30 giây'),
+      (60, '1 phút'),
+      (null, '♾ Kông giới hạn'),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.timer_rounded, color: Color(0xFF0F766E), size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Thời gian mỗi lượt',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: options.map((opt) {
+              final value = opt.$1;
+              final label = opt.$2;
+              final isSelected = _selectedTimeLimit == value;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedTimeLimit = value),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFF0F766E)
+                        : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFF0F766E) : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: isSelected
+                          ? Colors.white
+                          : (isDark ? Colors.white70 : const Color(0xFF475569)),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Nút bấm bắt đầu với gradient và hiệu ứng shadow
   Widget _buildStartButton() {
     return Container(
@@ -590,6 +677,7 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                 initialMode: _selectedMode,
                 initialDifficulty: _selectedDifficulty,
                 initialBoardSize: _selectedBoardSize,
+                timeLimitSeconds: _selectedTimeLimit,
               ),
             ),
           );
