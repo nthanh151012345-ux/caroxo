@@ -1,5 +1,8 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/profile_service.dart';
 import '../supabase_config.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -21,12 +24,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _profileService = ProfileService();
 
   bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
+  bool _isAvatarLoading = false;
+  String? _avatarUrl;
+  String? _avatarMessage;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvatar();
+  }
 
   @override
   void dispose() {
@@ -34,6 +47,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  String get _avatarInitial {
+    final email = widget.userEmail.trim();
+    return email.isEmpty ? 'P' : email[0].toUpperCase();
+  }
+
+  Future<void> _loadAvatar() async {
+    try {
+      final avatarUrl = await _profileService.fetchAvatarUrl();
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = avatarUrl;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = null;
+      });
+    }
+  }
+
+  Future<void> _pickAndUploadAvatar() async {
+    if (_isAvatarLoading) {
+      return;
+    }
+
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+      allowMultiple: false,
+      withData: true,
+    );
+
+    final file = result?.files.single;
+    if (file == null) {
+      return;
+    }
+
+    setState(() {
+      _isAvatarLoading = true;
+      _avatarMessage = 'Đang tải ảnh lên...';
+      _errorMessage = null;
+    });
+
+    try {
+      final avatarUrl = await _profileService.uploadAvatar(file);
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = avatarUrl;
+        _avatarMessage = 'Đã cập nhật ảnh đại diện.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _avatarMessage = 'Không thể cập nhật ảnh đại diện. Vui lòng thử lại.';
+        _errorMessage = '$e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAvatarLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _changePassword() async {
@@ -54,20 +132,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
-      // 1. Re-authenticate để kiểm tra mật khẩu cũ
       await SupabaseConfig.client!.auth.signInWithPassword(
         email: widget.userEmail,
         password: _currentPasswordController.text,
       );
 
-      // 2. Cập nhật mật khẩu mới
       await SupabaseConfig.client!.auth.updateUser(
         UserAttributes(password: _newPasswordController.text),
       );
 
       if (!mounted) return;
 
-      // 3. Hiển thị Dialog báo thành công và Đăng xuất
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -85,9 +160,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Đóng Dialog
-                Navigator.of(context).pop(); // Quay lại GameSetupScreen
-                widget.onSignOut(); // Đăng xuất
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+                widget.onSignOut();
               },
               child: const Text('Đồng ý'),
             ),
@@ -96,10 +171,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     } on AuthException catch (e) {
       String msg = e.message;
-      if (msg.contains('Invalid login credentials') || msg.contains('invalid_credentials')) {
+      if (msg.contains('Invalid login credentials') ||
+          msg.contains('invalid_credentials')) {
         msg = 'Mật khẩu hiện tại không chính xác.';
       } else if (msg.contains('Password should be')) {
-        msg = 'Mật khẩu mới không đáp ứng yêu cầu độ mạnh mật khẩu của hệ thống.';
+        msg =
+            'Mật khẩu mới không đáp ứng yêu cầu độ mạnh mật khẩu của hệ thống.';
       }
       setState(() {
         _errorMessage = msg;
@@ -117,6 +194,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Widget _buildAvatarHeader(ColorScheme colorScheme) {
+    final hasAvatar = _avatarUrl != null && _avatarUrl!.isNotEmpty;
+
+    return Column(
+      children: [
+        InkWell(
+          key: const ValueKey('profile_avatar_button'),
+          onTap: _isAvatarLoading ? null : _pickAndUploadAvatar,
+          borderRadius: BorderRadius.circular(56),
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              CircleAvatar(
+                radius: 54,
+                backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
+                backgroundImage: hasAvatar ? NetworkImage(_avatarUrl!) : null,
+                child: hasAvatar
+                    ? null
+                    : Text(
+                        _avatarInitial,
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+              ),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: colorScheme.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: _isAvatarLoading
+                    ? const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.photo_camera_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextButton.icon(
+          onPressed: _isAvatarLoading ? null : _pickAndUploadAvatar,
+          icon: const Icon(Icons.upload_rounded),
+          label: const Text('Đổi ảnh đại diện'),
+        ),
+        if (_avatarMessage != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            _avatarMessage!,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _avatarMessage == 'Đã cập nhật ảnh đại diện.'
+                  ? Colors.green
+                  : colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -124,7 +277,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: const Text('HỒ SƠ CÁ NHÂN'),
         centerTitle: true,
@@ -142,19 +297,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Card chứa Form đổi mật khẩu
+                    _buildAvatarHeader(colorScheme),
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF1E293B) : Colors.white,
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                          color: isDark
+                              ? Colors.white10
+                              : Colors.black.withValues(alpha: 0.05),
                           width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+                            color: Colors.black.withValues(
+                              alpha: isDark ? 0.15 : 0.04,
+                            ),
                             blurRadius: 16,
                             offset: const Offset(0, 8),
                           ),
@@ -165,7 +324,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.lock_reset_rounded, size: 24, color: colorScheme.primary),
+                              Icon(
+                                Icons.lock_reset_rounded,
+                                size: 24,
+                                color: colorScheme.primary,
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 'THAY ĐỔI MẬT KHẨU',
@@ -179,27 +342,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ],
                           ),
                           const SizedBox(height: 24),
-
-                          // Ô nhập Mật khẩu Hiện tại
                           TextFormField(
                             controller: _currentPasswordController,
                             obscureText: _obscureCurrent,
                             enabled: !_isLoading,
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(12),
+                                ),
                               ),
                               labelText: 'Mật khẩu hiện tại',
                               prefixIcon: const Icon(Icons.lock_outline),
                               suffixIcon: IconButton(
-                                tooltip: _obscureCurrent ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
+                                tooltip: _obscureCurrent
+                                    ? 'Hiện mật khẩu'
+                                    : 'Ẩn mật khẩu',
                                 onPressed: () {
                                   setState(() {
                                     _obscureCurrent = !_obscureCurrent;
                                   });
                                 },
                                 icon: Icon(
-                                  _obscureCurrent ? Icons.visibility : Icons.visibility_off,
+                                  _obscureCurrent
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
                                 ),
                               ),
                             ),
@@ -211,27 +378,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             },
                           ),
                           const SizedBox(height: 16),
-
-                          // Ô nhập Mật khẩu Mới
                           TextFormField(
                             controller: _newPasswordController,
                             obscureText: _obscureNew,
                             enabled: !_isLoading,
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(12),
+                                ),
                               ),
                               labelText: 'Mật khẩu mới',
                               prefixIcon: const Icon(Icons.lock_open_outlined),
                               suffixIcon: IconButton(
-                                tooltip: _obscureNew ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
+                                tooltip: _obscureNew
+                                    ? 'Hiện mật khẩu'
+                                    : 'Ẩn mật khẩu',
                                 onPressed: () {
                                   setState(() {
                                     _obscureNew = !_obscureNew;
                                   });
                                 },
                                 icon: Icon(
-                                  _obscureNew ? Icons.visibility : Icons.visibility_off,
+                                  _obscureNew
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
                                 ),
                               ),
                             ),
@@ -246,27 +417,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             },
                           ),
                           const SizedBox(height: 16),
-
-                          // Ô xác nhận Mật khẩu Mới
                           TextFormField(
                             controller: _confirmPasswordController,
                             obscureText: _obscureConfirm,
                             enabled: !_isLoading,
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(12)),
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(12),
+                                ),
                               ),
                               labelText: 'Xác nhận mật khẩu mới',
-                              prefixIcon: const Icon(Icons.lock_person_outlined),
+                              prefixIcon: const Icon(
+                                Icons.lock_person_outlined,
+                              ),
                               suffixIcon: IconButton(
-                                tooltip: _obscureConfirm ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
+                                tooltip: _obscureConfirm
+                                    ? 'Hiện mật khẩu'
+                                    : 'Ẩn mật khẩu',
                                 onPressed: () {
                                   setState(() {
                                     _obscureConfirm = !_obscureConfirm;
                                   });
                                 },
                                 icon: Icon(
-                                  _obscureConfirm ? Icons.visibility : Icons.visibility_off,
+                                  _obscureConfirm
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
                                 ),
                               ),
                             ),
@@ -280,7 +457,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               return null;
                             },
                           ),
-
                           if (_errorMessage != null) ...[
                             const SizedBox(height: 16),
                             Text(
@@ -295,8 +471,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-
-                    // Nút đổi mật khẩu Gradient
                     Container(
                       height: 56,
                       decoration: BoxDecoration(
@@ -335,7 +509,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               )
                             else ...[
-                              const Icon(Icons.published_with_changes_rounded, color: Colors.white),
+                              const Icon(
+                                Icons.published_with_changes_rounded,
+                                color: Colors.white,
+                              ),
                               const SizedBox(width: 8),
                               const Text(
                                 'XÁC NHẬN ĐỔI MẬT KHẨU',
