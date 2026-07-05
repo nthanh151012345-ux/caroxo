@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/move_model.dart';
 import 'caro_screen.dart';
 import 'profile_screen.dart';
+import '../services/profile_service.dart';
 
 class GameSetupScreen extends StatefulWidget {
   final String? userEmail;
@@ -18,11 +19,61 @@ class GameSetupScreen extends StatefulWidget {
 }
 
 class _GameSetupScreenState extends State<GameSetupScreen> {
+  final _profileService = ProfileService();
+  String? _avatarUrl;
+
   GameMode _selectedMode = GameMode.againstBot;
   Difficulty _selectedDifficulty = Difficulty.easy;
   int _selectedBoardSize = 15; // default to standard 15x15
   /// null = không giới hạn thời gian
   int? _selectedTimeLimit = 30;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvatar();
+  }
+
+  Future<void> _loadAvatar() async {
+    if (widget.userEmail == null) {
+      return;
+    }
+
+    try {
+      final avatarUrl = await _profileService.fetchAvatarUrl();
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = avatarUrl;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = null;
+      });
+    }
+  }
+
+  Widget _buildAccountAvatar() {
+    final email = widget.userEmail ?? '';
+    final initial = email.isEmpty ? 'P' : email[0].toUpperCase();
+
+    return CircleAvatar(
+      radius: 16,
+      backgroundColor: Colors.white.withValues(alpha: 0.2),
+      backgroundImage:
+          _avatarUrl == null || _avatarUrl!.isEmpty ? null : NetworkImage(_avatarUrl!),
+      child: _avatarUrl == null || _avatarUrl!.isEmpty
+          ? Text(
+              initial,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            )
+          : null,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -265,18 +316,14 @@ class _GameSetupScreenState extends State<GameSetupScreen> {
                           onSignOut: widget.onSignOut!,
                         ),
                       ),
-                    );
+                    ).then((_) => _loadAvatar());
                   },
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.manage_accounts_rounded,
-                          size: 14,
-                          color: Colors.white70,
-                        ),
+                        _buildAccountAvatar(),
                         const SizedBox(width: 4),
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 100),
