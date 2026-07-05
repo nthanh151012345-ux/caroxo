@@ -5,9 +5,10 @@ import 'caro_ai.dart';
 
 /// Bộ điều khiển logic chính của game Caro (Gomoku)
 class GameController extends ChangeNotifier {
-  static const int boardSize = 20;
+  /// Kích thước bàn cờ (có thể thay đổi khi bắt đầu ván mới)
+  int boardSize = 20;
 
-  /// Bàn cờ 20x20 chứa thông tin các quân cờ đã đánh
+  /// Bàn cờ NxN chứa thông tin các quân cờ đã đánh
   late List<List<Player?>> board;
 
   /// Lịch sử các nước đi để phục vụ chức năng Undo
@@ -174,9 +175,10 @@ class GameController extends ChangeNotifier {
   }
 
   /// Chơi ván mới (Giữ nguyên điểm số)
-  void newGame({GameMode? mode, Difficulty? diff}) {
+  void newGame({GameMode? mode, Difficulty? diff, int? size}) {
     if (mode != null) gameMode = mode;
     if (diff != null) difficulty = diff;
+    if (size != null) boardSize = size;
 
     _initBoard();
     moveHistory.clear();
@@ -190,11 +192,11 @@ class GameController extends ChangeNotifier {
   }
 
   /// Làm mới điểm số và chơi ván mới
-  void resetScore({GameMode? mode, Difficulty? diff}) {
+  void resetScore({GameMode? mode, Difficulty? diff, int? size}) {
     xWins = 0;
     oWins = 0;
     draws = 0;
-    newGame(mode: mode, diff: diff);
+    newGame(mode: mode, diff: diff, size: size);
   }
 
   /// Thuật toán kiểm tra thắng cuộc tối ưu O(1) từ vị trí đánh mới nhất

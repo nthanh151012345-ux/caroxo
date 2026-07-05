@@ -20,17 +20,16 @@ class BoardWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final int size = board.length;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      color: isDark ? const Color(0xFF4A5568) : const Color(0xFFC0C0C0),
+      color: const Color(0xFFDCDDE4),
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: size,
-          crossAxisSpacing: 1.0,
-          mainAxisSpacing: 1.0,
+          crossAxisSpacing: 0.7,
+          mainAxisSpacing: 0.7,
         ),
         itemCount: size * size,
         itemBuilder: (context, index) {

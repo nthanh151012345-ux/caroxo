@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_config.dart';
-import 'screens/caro_screen.dart';
+import 'screens/game_setup_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,8 +78,8 @@ class _AuthGateState extends State<AuthGate> {
       return LoginPage(onSignedIn: _handleSignedIn);
     }
 
-    // Chuyển hướng người dùng đã đăng nhập sang màn hình CaroScreen mới thiết kế
-    return CaroScreen(userEmail: _userEmail!, onSignOut: _handleSignOut);
+    // Chuyển hướng người dùng đã đăng nhập sang màn hình GameSetupScreen thiết lập trận đấu
+    return GameSetupScreen(userEmail: _userEmail!, onSignOut: _handleSignOut);
   }
 }
 
